@@ -1,0 +1,73 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title КиноБездна. Диаграмма контейнеров (To-Be)
+
+Person(user, "Пользователь", "Смотрит фильмы с телефона, ноутбука или Smart TV")
+System_Ext(recsys, "Рекомендательная система", "Сторонний сервис подборок")
+System_Ext(payment_systems, "Платежные системы", "Прием оплаты")
+System_Ext(partners, "Партнеры", "Сервисы лояльности, маркетплейсы, источники контента")
+
+System_Boundary(cinema, "КиноБездна (Kubernetes)") {
+  Container(clients, "Клиенты", "Web, iOS, Android, Smart TV", "Интерфейс пользователя")
+  Container(gateway, "API Gateway", "Python, proxy service", "Единая точка входа. Маршрутизация, проверка токена, переключение трафика с монолита по фиче флагу")
+  Container(bff, "BFF", "Python", "Отдает данные под каждый тип устройства")
+
+  Container(monolith, "Монолит", "Go", "То что еще не вынесли в сервисы")
+  Container(user_svc, "User Service", "Go", "Пользователи, авторизация, избранное")
+  Container(movies_svc, "Movies Service", "Go", "Метаданные фильмов: жанры, актеры, оценки")
+  Container(video_svc, "Video Service", "Go", "Видео и ссылки на просмотр")
+  Container(subscription_svc, "Subscription Service", "Go", "Подписки")
+  Container(payment_svc, "Payment Service", "Go", "Платежи")
+  Container(discount_svc, "Discount Service", "Go", "Скидки и программы лояльности")
+  Container(recs_svc, "Recommendation Service", "Go", "Подборки для пользователя")
+  Container(events_svc, "Events Service", "Python", "Создает и обрабатывает события")
+
+  ContainerDb(monolith_db, "Monolith DB", "PostgreSQL", "Старая общая база")
+  ContainerDb(user_db, "User DB", "PostgreSQL", "Пользователи и избранное")
+  ContainerDb(movies_db, "Movies DB", "PostgreSQL", "Фильмы и метаданные")
+  ContainerDb(video_storage, "Хранилище видео", "S3, CDN", "Файлы видео")
+  ContainerDb(subscription_db, "Subscription DB", "PostgreSQL", "Подписки")
+  ContainerDb(payment_db, "Payment DB", "PostgreSQL", "Платежи")
+  ContainerDb(discount_db, "Discount DB", "PostgreSQL", "Скидки")
+
+  ContainerQueue(kafka, "Kafka", "Kafka", "События user, payment, movie")
+}
+
+Rel(user, clients, "Пользуется", "HTTPS")
+Rel(clients, gateway, "Запросы", "HTTPS, REST")
+Rel(gateway, bff, "REST")
+Rel(gateway, monolith, "Пока не вынесено", "REST")
+Rel(gateway, movies_svc, "Часть /api/movies по фиче флагу", "REST")
+Rel(gateway, events_svc, "/api/events", "REST")
+
+Rel(bff, user_svc, "REST")
+Rel(bff, movies_svc, "REST")
+Rel(bff, video_svc, "REST")
+Rel(bff, subscription_svc, "REST")
+Rel(bff, payment_svc, "REST")
+Rel(bff, recs_svc, "REST")
+
+Rel(monolith, monolith_db, "SQL")
+Rel(user_svc, user_db, "SQL")
+Rel(movies_svc, movies_db, "SQL")
+Rel(video_svc, video_storage, "S3 API")
+Rel(subscription_svc, subscription_db, "SQL")
+Rel(payment_svc, payment_db, "SQL")
+Rel(discount_svc, discount_db, "SQL")
+
+Rel(payment_svc, payment_systems, "Оплата", "HTTPS")
+Rel(discount_svc, partners, "Баллы, промокоды", "HTTPS")
+Rel(video_svc, partners, "Контент", "HTTPS")
+Rel(recs_svc, recsys, "Подборки", "HTTPS")
+
+Rel(user_svc, kafka, "Пишет user события")
+Rel(payment_svc, kafka, "Пишет payment события")
+Rel(movies_svc, kafka, "Пишет movie события")
+Rel(events_svc, kafka, "Пишет и читает события")
+Rel(kafka, subscription_svc, "Оплата прошла, продлить подписку")
+Rel(kafka, discount_svc, "Начислить бонусы")
+Rel(kafka, recs_svc, "Просмотры и оценки")
+Rel(kafka, monolith, "События для старой логики")
+
+@enduml
