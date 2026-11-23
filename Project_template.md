@@ -5,7 +5,7 @@
 1. Спроектируйте to be архитектуру КиноБездны, разделив всю систему на отдельные домены и организовав интеграционное взаимодействие и единую точку вызова сервисов.
 Результат представьте в виде контейнерной диаграммы в нотации С4.
 Добавьте ссылку на файл в этот шаблон
-[ссылка на файл](ссылка)
+[Диаграмма контейнеров](diagrams/to-be/containers.puml)
 
 # Задание 2
 
@@ -59,6 +59,22 @@
 Необходимые тесты для проверки этого API вызываются при запуске npm run test:local из папки tests/postman 
 Приложите скриншот тестов и скриншот состояния топиков Kafka из UI http://localhost:8090 
 
+### Решение
+
+Proxy сделал на Python (FastAPI) в [src/microservices/proxy](src/microservices/proxy/app.py)
+Запросы на `/api/movies` уходят в movies service с вероятностью `MOVIES_MIGRATION_PERCENT` процентов, остальные в монолит. Если `GRADUAL_MIGRATION` выключен, все запросы фильмов идут в movies service. `/api/events` идут в events service, все остальное в монолит. Куда ушел запрос, видно в логе proxy
+
+Events сделал на Python (FastAPI, aiokafka) в [src/microservices/events](src/microservices/events/app.py)
+При вызове `POST /api/events/movie`, `/user`, `/payment` событие пишется в топик `movie-events`, `user-events` или `payment-events`. Этот же сервис читает топики и пишет события в лог
+
+Скриншот тестов
+
+![tests](screenshots/task2-tests.png)
+
+Топики в Kafka UI
+
+![kafka](screenshots/task2-kafka.png)
+
 # Задание 3
 
 Команда начала переезд в Kubernetes для лучшего масштабирования и повышения надежности. 
@@ -108,6 +124,12 @@ jobs:
 ```
 Как только сборка отработает и в github registry появятся ваши образы, можно переходить к блоку настройки Kubernetes
 Успешным результатом данного шага является "зеленая" сборка и "зеленые" тесты
+
+### Решение
+
+В [docker-build-push.yml](.github/workflows/docker-build-push.yml) добавил сборку и push образов events service и proxy service. Сборка и тесты запускаются еще и при push в ветку `cinema`. Версии actions обновил до актуальных
+
+![ci](screenshots/task3-ci.png)
 
 
 ### Proxy в Kubernetes
@@ -275,6 +297,18 @@ cat .docker/config.json | base64
 #### Шаг 3
 Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
+### Решение
+
+Сделал Deployment и Service в [proxy-service.yaml](src/kubernetes/proxy-service.yaml) и [events-service.yaml](src/kubernetes/events-service.yaml). В [ingress.yaml](src/kubernetes/ingress.yaml) `/` идет в proxy service, `/api/events` в events service. В configmap добавил `EVENTS_SERVICE_URL` и `KAFKA_BROKERS`
+
+Вывод /api/movies
+
+![movies](screenshots/task3-movies.png)
+
+Логи events service
+
+![events](screenshots/task3-events.png)
+
 
 # Задание 4
 Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
@@ -349,6 +383,18 @@ minikube tunnel
 Потом вызовите 
 https://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+
+### Решение
+
+В [values.yaml](src/kubernetes/helm/values.yaml) поменял пути до образов. Заполнил шаблоны [proxy-service.yaml](src/kubernetes/helm/templates/services/proxy-service.yaml) и [events-service.yaml](src/kubernetes/helm/templates/services/events-service.yaml). В [configmap.yaml](src/kubernetes/helm/templates/configmap.yaml) был неправильный адрес `http://movies:8081`, исправил на `http://movies-service:8081`
+
+Развертывание helm
+
+![helm](screenshots/task4-helm.png)
+
+Вывод /api/movies
+
+![movies](screenshots/task4-movies.png)
 
 ## Удаляем все
 
